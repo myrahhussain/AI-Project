@@ -41,3 +41,16 @@ class Meta:
 
     def __len__(self) -> int:
         return len(self.y)
+
+
+def load_meta(dataset) -> Meta:
+    """Build a Meta from a WILDS Camelyon17 dataset object."""
+    arr = dataset.metadata_array.numpy()
+    fields = {n: i for i, n in enumerate(dataset.metadata_fields)}
+    return Meta(
+        hospital=arr[:, fields["hospital"]].astype(int),
+        slide=arr[:, fields["slide"]].astype(int),
+        y=arr[:, fields["y"]].astype(int),
+        split=np.asarray(dataset.split_array),
+        split_dict=dict(dataset.split_dict),
+    )
