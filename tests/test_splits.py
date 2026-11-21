@@ -86,3 +86,12 @@ def test_leave_one_hospital_out_excludes_test_hospital(test_h):
     assert not data.shared_slides(meta, split["train"], split["id_val"])
     # All four remaining hospitals are used for training
     assert set(meta.hospital[split["train"]]) == set(range(5)) - {test_h}
+
+
+def test_loho_with_separate_ood_validation_hospital():
+    meta = synthetic_meta()
+    split = data.make_loho_split(meta, test_hospital=2, ood_val_hospital=1, n_train=1500, n_id_val=300, n_ood_val=300)
+    assert set(meta.hospital[split["ood_val"]]) == {1}
+    assert 1 not in set(meta.hospital[split["train"]])
+    with pytest.raises(ValueError):
+        data.make_loho_split(meta, test_hospital=2, ood_val_hospital=2)
