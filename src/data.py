@@ -164,3 +164,33 @@ def make_official_split(
     split = _make_split(meta, pool, ood_pool, n_train, n_id_val, n_ood_val, holdout_frac, rng, test_pool, n_test)
     check_split(meta, split, test_hospitals=(TEST_HOSPITAL,), allow_test=include_test)
     return split
+
+
+def make_loho_split(
+    meta: Meta,
+    test_hospital: int,
+    ood_val_hospital: int | None = None,
+    n_train: int = 40000,
+    n_id_val: int = 8000,
+    n_ood_val: int = 8000,
+    seed: int = 0,
+    holdout_frac: float = 0.2,
+    include_test: bool = False,
+    n_test: int | None = None,
+) -> dict:
+    """Leave-one-hospital-out split.
+
+    The test hospital is held out entirely. If `ood_val_hospital` is given it is
+    also held out of training and used for choosing settings; otherwise
+    validation is only the held-out slides of the training hospitals.
+    """
+    rng = np.random.default_rng(seed)
+    excluded = {test_hospital} | ({ood_val_hospital} if ood_val_hospital is not None else set())
+    if ood_val_hospital is not None and ood_val_hospital == test_hospital:
+        raise ValueError("validation hospital must differ from test hospital")
+    pool = np.where(~np.isin(meta.hospital, list(excluded)))[0]
+    ood_pool = np.where(meta.hospital == ood_val_hospital)[0] if ood_val_hospital is not None else None
+    test_pool = np.where(meta.hospital == test_hospital)[0] if include_test else None
+    split = _make_split(meta, pool, ood_pool, n_train, n_id_val, n_ood_val, holdout_frac, rng, test_pool, n_test)
+    check_split(meta, split, test_hospitals=(test_hospital,), allow_test=include_test)
+    return split
