@@ -54,3 +54,9 @@ def load_meta(dataset) -> Meta:
         split=np.asarray(dataset.split_array),
         split_dict=dict(dataset.split_dict),
     )
+
+
+def shared_slides(meta: Meta, idx_a, idx_b) -> set:
+    """Slides that appear in both index sets (should be empty for clean splits)."""
+    sk = meta.slide_key
+    return set(sk[np.asarray(idx_a)]) & set(sk[np.asarray(idx_b)])
