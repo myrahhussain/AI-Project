@@ -223,3 +223,22 @@ def check_split(meta: Meta, split: dict, test_hospitals=(TEST_HOSPITAL,), allow_
             "hospitals": sorted(set(meta.hospital[idx].tolist())),
         }
     return summary
+
+
+def load_patches(dataset, idx, cache_path: str | None = None, workers: int = 8) -> np.ndarray:
+    """Read patches into a uint8 array (N, 96, 96, 3). Optionally cached on disk."""
+    idx = np.asarray(idx)
+    if cache_path and os.path.exists(cache_path):
+        z = np.load(cache_path)
+        if np.array_equal(z["idx"], idx):
+            return z["x"]
+
+    def get(i):
+        return np.asarray(dataset.get_input(int(i)).convert("RGB"), dtype=np.uint8)
+
+    with ThreadPoolExecutor(workers) as ex:
+        arrs = list(ex.map(get, idx))
+    x = np.stack(arrs)
+    if cache_path:
+        np.savez(cache_path, x=x, idx=idx)
+    return x
