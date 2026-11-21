@@ -60,3 +60,15 @@ def shared_slides(meta: Meta, idx_a, idx_b) -> set:
     """Slides that appear in both index sets (should be empty for clean splits)."""
     sk = meta.slide_key
     return set(sk[np.asarray(idx_a)]) & set(sk[np.asarray(idx_b)])
+
+
+def check_official_id_val_overlap(meta: Meta) -> dict:
+    """How many slides does the official `id_val` split share with `train`?"""
+    tr = np.where(meta.split == meta.split_dict["train"])[0]
+    iv = np.where(meta.split == meta.split_dict["id_val"])[0]
+    shared = shared_slides(meta, tr, iv)
+    return {
+        "train_slides": len(set(meta.slide_key[tr])),
+        "id_val_slides": len(set(meta.slide_key[iv])),
+        "shared_slides": len(shared),
+    }
