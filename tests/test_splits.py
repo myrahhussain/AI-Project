@@ -50,3 +50,12 @@ def test_every_training_hospital_is_represented_in_id_val():
     meta = synthetic_meta()
     split = data.make_official_split(meta, n_train=2000, n_id_val=900, n_ood_val=300, seed=2)
     assert set(meta.hospital[split["id_val"]]) == set(data.TRAIN_HOSPITALS)
+
+
+def test_subsets_are_class_balanced_and_spread_across_slides():
+    meta = synthetic_meta()
+    split = data.make_official_split(meta, n_train=2000, n_id_val=400, n_ood_val=400, seed=3)
+    tr = split["train"]
+    assert abs(meta.y[tr].mean() - 0.5) < 0.01
+    counts = np.bincount(np.unique(meta.slide_key[tr], return_inverse=True)[1])
+    assert counts.max() <= 3 * counts.min()  # roughly even across slides
