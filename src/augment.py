@@ -63,3 +63,13 @@ def hed_augment(x: torch.Tensor, sigma: float, generator: torch.Generator | None
     alpha, beta = alpha.to(x.device, x.dtype), beta.to(x.device, x.dtype)
     stains = rgb_to_hed(x)
     return hed_to_rgb(alpha * stains + beta)
+
+
+def flip_rot90(x: torch.Tensor, generator: torch.Generator | None = None) -> torch.Tensor:
+    """Random member of the 8 flips / 90-degree rotations, chosen per image."""
+    n = x.shape[0]
+    r = torch.randint(0, 2, (n, 3), generator=generator).bool().to(x.device)
+    x = torch.where(r[:, 0].view(n, 1, 1, 1), x.flip(3), x)
+    x = torch.where(r[:, 1].view(n, 1, 1, 1), x.flip(2), x)
+    x = torch.where(r[:, 2].view(n, 1, 1, 1), x.transpose(2, 3), x)
+    return x
