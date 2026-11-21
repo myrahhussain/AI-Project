@@ -95,3 +95,17 @@ def test_loho_with_separate_ood_validation_hospital():
     assert 1 not in set(meta.hospital[split["train"]])
     with pytest.raises(ValueError):
         data.make_loho_split(meta, test_hospital=2, ood_val_hospital=2)
+
+
+def test_check_split_catches_injected_leaks():
+    meta = synthetic_meta()
+    split = data.make_official_split(meta, n_train=1000, n_id_val=200, n_ood_val=200, seed=0)
+    bad = dict(split)
+    bad["id_val"] = np.concatenate([split["id_val"], split["train"][:5]])
+    with pytest.raises(AssertionError):
+        data.check_split(meta, bad)
+    test_idx = np.where(meta.hospital == data.TEST_HOSPITAL)[0][:5]
+    bad2 = dict(split)
+    bad2["ood_val"] = np.concatenate([split["ood_val"], test_idx])
+    with pytest.raises(AssertionError):
+        data.check_split(meta, bad2)
