@@ -44,3 +44,22 @@ def hed_to_rgb(stains: torch.Tensor) -> torch.Tensor:
     log_adjust = -math.log(_EPS)
     log_rgb = -(stains * log_adjust) @ rgb_from_hed
     return torch.exp(log_rgb).clamp(0, 1).permute(0, 3, 1, 2)
+
+
+def hed_augment(x: torch.Tensor, sigma: float, generator: torch.Generator | None = None) -> torch.Tensor:
+    """Randomly perturb the H, E and DAB channels of each image.
+
+    For every image and every stain channel s:  s' = alpha * s + beta, with
+    alpha ~ U(1 - sigma, 1 + sigma) and beta ~ U(-sigma, sigma).
+    Tellez et al. call sigma ~0.05 "light" and ~0.2 "strong".
+    `generator` must be a CPU generator (random numbers are drawn on CPU, then
+    moved to the tensor's device, so seeding behaves the same on CPU and GPU).
+    """
+    if sigma == 0:
+        return x
+    n = x.shape[0]
+    alpha = 1 + (torch.rand(n, 1, 1, 3, generator=generator) * 2 - 1) * sigma
+    beta = (torch.rand(n, 1, 1, 3, generator=generator) * 2 - 1) * sigma
+    alpha, beta = alpha.to(x.device, x.dtype), beta.to(x.device, x.dtype)
+    stains = rgb_to_hed(x)
+    return hed_to_rgb(alpha * stains + beta)
