@@ -72,3 +72,37 @@ def check_official_id_val_overlap(meta: Meta) -> dict:
         "id_val_slides": len(set(meta.slide_key[iv])),
         "shared_slides": len(shared),
     }
+
+
+def balanced_subset(meta: Meta, candidates, n: int, rng: np.random.Generator) -> np.ndarray:
+    """Class-balanced subset of `candidates`, spread evenly across slides.
+
+    Takes up to n/2 patches per class, drawing round-robin from the slides so
+    that no single slide dominates. Returns fewer than n if a class runs out.
+    """
+    candidates = np.asarray(candidates)
+    sk = meta.slide_key
+    per_class = n // 2
+    chosen = []
+    for c in (0, 1):
+        cc = candidates[meta.y[candidates] == c]
+        groups = {}
+        for s in np.unique(sk[cc]):
+            g = cc[sk[cc] == s].copy()
+            rng.shuffle(g)
+            groups[s] = g
+        order = list(groups.keys())
+        rng.shuffle(order)
+        ptr = {s: 0 for s in order}
+        picked = []
+        while len(picked) < per_class and any(ptr[s] < len(groups[s]) for s in order):
+            for s in order:
+                if ptr[s] < len(groups[s]):
+                    picked.append(groups[s][ptr[s]])
+                    ptr[s] += 1
+                    if len(picked) >= per_class:
+                        break
+        chosen.append(np.array(picked, dtype=int))
+    out = np.concatenate(chosen)
+    rng.shuffle(out)
+    return out
