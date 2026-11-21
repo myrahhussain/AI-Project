@@ -36,3 +36,11 @@ def rgb_to_hed(x: torch.Tensor) -> torch.Tensor:
     log_adjust = math.log(_EPS)
     stains = (torch.log(x) / log_adjust).permute(0, 2, 3, 1) @ hed_from_rgb
     return stains.clamp_min(0)
+
+
+def hed_to_rgb(stains: torch.Tensor) -> torch.Tensor:
+    """(N,H,W,3) stain concentrations -> (N,3,H,W) RGB in [0,1]."""
+    rgb_from_hed, _ = _mats(stains)
+    log_adjust = -math.log(_EPS)
+    log_rgb = -(stains * log_adjust) @ rgb_from_hed
+    return torch.exp(log_rgb).clamp(0, 1).permute(0, 3, 1, 2)
