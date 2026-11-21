@@ -89,3 +89,136 @@ def estimate_stain_matrix(
     if not ok:
         return w0.copy(), False
     return w, True
+
+
+def solve_concentrations(od_pixels: np.ndarray, w: np.ndarray, n_iter: int = 30) -> np.ndarray:
+    """Non-negative stain concentrations for fixed W (multiplicative NNLS)."""
+    v = np.asarray(od_pixels, dtype=np.float64)
+    c = np.maximum(v @ np.linalg.pinv(w), 0) + 1e-3
+    ww = w @ w.T
+    vw = v @ w.T
+    for _ in range(n_iter):
+        c *= vw / (c @ ww + _EPS)
+    return c
+
+
+class StainNormalizer:
+    """Fit on one reference patch, then transform patches to its stain colours."""
+
+    def __init__(
+        self,
+        lam: float = 0.02,
+        lum_thresh: float = 0.8,
+        min_tissue_px: int = 200,
+        max_px: int = 20000,
+        n_iter: int = 300,
+        percentile: float = 99.0,
+        seed: int = 0,
+    ):
+        self.lam, self.lum_thresh, self.min_tissue_px = lam, lum_thresh, min_tissue_px
+        self.max_px, self.n_iter, self.percentile, self.seed = max_px, n_iter, percentile, seed
+        self.w_ref: np.ndarray | None = None
+        self.maxc_ref: np.ndarray | None = None
+
+    # ---- estimation -------------------------------------------------
+    def _tissue_od(self, imgs) -> np.ndarray:
+        parts = []
+        for img in imgs:
+            m = tissue_mask(img, self.lum_thresh)
+            if m.any():
+                parts.append(rgb_to_od(img[m]))
+        return np.concatenate(parts) if parts else np.zeros((0, 3))
+
+    def estimate(self, imgs):
+        """Estimate (W, maxC, ok) from the pooled tissue pixels of one or more images."""
+        od = self._tissue_od(imgs)
+        if len(od) < self.min_tissue_px:
+            return DEFAULT_W.copy(), None, False
+        if len(od) > self.max_px:
+            rng = np.random.default_rng(self.seed)
+            od = od[rng.choice(len(od), self.max_px, replace=False)]
+        w, ok = estimate_stain_matrix(od, lam=self.lam, n_iter=self.n_iter)
+        c = solve_concentrations(od, w)
+        maxc = np.percentile(c, self.percentile, axis=0)
+        if not np.all(maxc > 1e-4):
+            return DEFAULT_W.copy(), None, False
+        return w, maxc, ok
+
+    def fit(self, reference_img: np.ndarray) -> "StainNormalizer":
+        w, maxc, ok = self.estimate([reference_img])
+        if maxc is None:
+            raise ValueError("reference image has too little tissue to fit stain colours")
+        self.w_ref, self.maxc_ref = w, maxc
+        return self
+
+    # ---- transformation ---------------------------------------------
+    def transform(self, img: np.ndarray, w: np.ndarray | None = None, maxc: np.ndarray | None = None) -> np.ndarray:
+        """Normalise one uint8 patch. If (w, maxc) are given (e.g. per slide) they are used
+        instead of per-patch estimates."""
+        assert self.w_ref is not None, "call fit() first"
+        mask = tissue_mask(img, self.lum_thresh)
+        if w is None or maxc is None:
+            w, maxc, _ = self.estimate([img])
+        if maxc is None or mask.sum() < 1:
+            return img.copy()  # not enough tissue to estimate: leave unchanged
+        od = rgb_to_od(img[mask])
+        c = solve_concentrations(od, w)
+        c = c * (self.maxc_ref / np.maximum(maxc, _EPS))
+        out = img.copy()
+        out[mask] = np.rint(od_to_rgb(c @ self.w_ref)).astype(np.uint8)
+        return out
+
+    def transform_batch(self, x: np.ndarray, slides: np.ndarray | None = None, mode: str = "slide",
+                        patches_per_slide: int = 200, progress: bool = False) -> np.ndarray:
+        """Normalise an array (N, H, W, 3) of uint8 patches.
+
+        mode="patch": stains estimated for every patch separately.
+        mode="slide": stains estimated once per slide from pooled patches (needs `slides`).
+        """
+        out = np.empty_like(x)
+        iterator = range(len(x))
+        if mode == "patch" or slides is None:
+            if progress:
+                from tqdm import tqdm
+                iterator = tqdm(iterator)
+            for i in iterator:
+                out[i] = self.transform(x[i])
+            return out
+        rng = np.random.default_rng(self.seed)
+        slides = np.asarray(slides)
+        groups = np.unique(slides)
+        if progress:
+            from tqdm import tqdm
+            groups = tqdm(groups)
+        for s in groups:
+            idx = np.where(slides == s)[0]
+            pick = idx if len(idx) <= patches_per_slide else rng.choice(idx, patches_per_slide, replace=False)
+            w, maxc, _ = self.estimate([x[i] for i in pick])
+            for i in idx:
+                out[i] = self.transform(x[i], w=w, maxc=maxc)
+        return out
+
+
+def choose_reference(x: np.ndarray, n_candidates: int = 50, seed: int = 0, lum_thresh: float = 0.8) -> int:
+    """Index of a reasonable reference patch: plenty of tissue, both stains present.
+
+    Pass ONLY training-hospital patches. Candidate selection is unsupervised
+    (no labels, no test hospital); the final reference can be compared on the
+    validation hospital.
+    """
+    rng = np.random.default_rng(seed)
+    cand = rng.choice(len(x), min(n_candidates, len(x)), replace=False)
+    best, best_score = int(cand[0]), -1.0
+    norm = StainNormalizer()
+    for i in cand:
+        m = tissue_mask(x[i], lum_thresh)
+        if m.mean() < 0.6:
+            continue
+        w, maxc, ok = norm.estimate([x[i]])
+        if maxc is None or not ok:
+            continue
+        # prefer images where both stains are clearly present
+        score = float(m.mean() * min(maxc) / max(maxc))
+        if score > best_score:
+            best, best_score = int(i), score
+    return best
