@@ -45,3 +45,29 @@ def _tissue_like(n=4, size=32, seed=3):
 def test_sigma_zero_is_identity():
     x = _tissue_like()
     assert torch.equal(augment.hed_augment(x, 0.0), x)
+
+
+def test_output_shape_and_range():
+    x = _tissue_like()
+    y = augment.hed_augment(x, 0.2, torch.Generator().manual_seed(0))
+    assert y.shape == x.shape
+    assert float(y.min()) >= 0 and float(y.max()) <= 1
+    assert torch.isfinite(y).all()
+
+
+def test_seeded_augmentation_is_deterministic_and_seeds_differ():
+    x = _tissue_like()
+    a = augment.hed_augment(x, 0.2, torch.Generator().manual_seed(7))
+    b = augment.hed_augment(x, 0.2, torch.Generator().manual_seed(7))
+    c = augment.hed_augment(x, 0.2, torch.Generator().manual_seed(8))
+    assert torch.equal(a, b)
+    assert not torch.equal(a, c)
+
+
+def test_larger_sigma_changes_colours_more():
+    x = _tissue_like(n=16)
+    diffs = []
+    for s in (0.05, 0.1, 0.2):
+        y = augment.hed_augment(x, s, torch.Generator().manual_seed(0))
+        diffs.append(float((y - x).abs().mean()))
+    assert diffs[0] < diffs[1] < diffs[2]
