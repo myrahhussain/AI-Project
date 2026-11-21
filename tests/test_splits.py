@@ -68,3 +68,10 @@ def test_split_is_deterministic_for_a_seed_and_differs_across_seeds():
     c = data.make_official_split(meta, n_train=1000, n_id_val=200, n_ood_val=200, seed=6)
     assert np.array_equal(a["train"], b["train"])
     assert not np.array_equal(a["train"], c["train"])
+
+
+def test_test_hospital_only_returned_when_requested():
+    meta = synthetic_meta()
+    split = data.make_official_split(meta, n_train=1000, n_id_val=200, n_ood_val=200, seed=0, include_test=True, n_test=300)
+    assert set(meta.hospital[split["test"]]) == {data.TEST_HOSPITAL}
+    assert not np.isin(meta.hospital[split["train"]], [data.TEST_HOSPITAL]).any()
