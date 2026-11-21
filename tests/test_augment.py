@@ -71,3 +71,22 @@ def test_larger_sigma_changes_colours_more():
         y = augment.hed_augment(x, s, torch.Generator().manual_seed(0))
         diffs.append(float((y - x).abs().mean()))
     assert diffs[0] < diffs[1] < diffs[2]
+
+
+def test_augmentation_keeps_spatial_structure():
+    x = _tissue_like(n=2, size=48)
+    y = augment.hed_augment(x, 0.1, torch.Generator().manual_seed(0))
+    gx, gy = x.mean(1).flatten(), y.mean(1).flatten()
+    corr = np.corrcoef(gx.numpy(), gy.numpy())[0, 1]
+    assert corr > 0.9
+
+
+def test_flip_rot90_preserves_pixels_and_covers_all_eight_variants():
+    x = torch.arange(2 * 3 * 4 * 4, dtype=torch.float32).view(2, 3, 4, 4)
+    g = torch.Generator().manual_seed(0)
+    seen = set()
+    for _ in range(200):
+        y = augment.flip_rot90(x[:1], g)
+        assert torch.equal(torch.sort(y.flatten()).values, torch.sort(x[:1].flatten()).values)
+        seen.add(tuple(y.flatten().tolist()))
+    assert len(seen) == 8
