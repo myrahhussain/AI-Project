@@ -75,3 +75,14 @@ def test_test_hospital_only_returned_when_requested():
     split = data.make_official_split(meta, n_train=1000, n_id_val=200, n_ood_val=200, seed=0, include_test=True, n_test=300)
     assert set(meta.hospital[split["test"]]) == {data.TEST_HOSPITAL}
     assert not np.isin(meta.hospital[split["train"]], [data.TEST_HOSPITAL]).any()
+
+
+@pytest.mark.parametrize("test_h", [0, 1, 2, 3, 4])
+def test_leave_one_hospital_out_excludes_test_hospital(test_h):
+    meta = synthetic_meta()
+    split = data.make_loho_split(meta, test_hospital=test_h, n_train=2000, n_id_val=400, seed=0)
+    for name, idx in split.items():
+        assert test_h not in set(meta.hospital[idx]), name
+    assert not data.shared_slides(meta, split["train"], split["id_val"])
+    # All four remaining hospitals are used for training
+    assert set(meta.hospital[split["train"]]) == set(range(5)) - {test_h}
