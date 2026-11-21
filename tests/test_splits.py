@@ -59,3 +59,12 @@ def test_subsets_are_class_balanced_and_spread_across_slides():
     assert abs(meta.y[tr].mean() - 0.5) < 0.01
     counts = np.bincount(np.unique(meta.slide_key[tr], return_inverse=True)[1])
     assert counts.max() <= 3 * counts.min()  # roughly even across slides
+
+
+def test_split_is_deterministic_for_a_seed_and_differs_across_seeds():
+    meta = synthetic_meta()
+    a = data.make_official_split(meta, n_train=1000, n_id_val=200, n_ood_val=200, seed=5)
+    b = data.make_official_split(meta, n_train=1000, n_id_val=200, n_ood_val=200, seed=5)
+    c = data.make_official_split(meta, n_train=1000, n_id_val=200, n_ood_val=200, seed=6)
+    assert np.array_equal(a["train"], b["train"])
+    assert not np.array_equal(a["train"], c["train"])
