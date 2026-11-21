@@ -32,3 +32,15 @@ def test_official_id_val_overlap_is_detected():
     meta = synthetic_meta()
     info = data.check_official_id_val_overlap(meta)
     assert info["shared_slides"] > 0  # the official id_val would leak in this mock
+
+
+def test_official_split_has_no_slide_leakage_and_no_test_hospital():
+    meta = synthetic_meta()
+    split = data.make_official_split(meta, n_train=2000, n_id_val=400, n_ood_val=400, seed=1)
+    assert not data.shared_slides(meta, split["train"], split["id_val"])
+    assert not data.shared_slides(meta, split["train"], split["ood_val"])
+    assert "test" not in split
+    for name, idx in split.items():
+        assert not np.isin(meta.hospital[idx], [data.TEST_HOSPITAL]).any(), name
+    assert set(meta.hospital[split["ood_val"]]) == {data.VAL_HOSPITAL}
+    assert set(meta.hospital[split["train"]]) <= set(data.TRAIN_HOSPITALS)
