@@ -44,3 +44,9 @@ def test_official_split_has_no_slide_leakage_and_no_test_hospital():
         assert not np.isin(meta.hospital[idx], [data.TEST_HOSPITAL]).any(), name
     assert set(meta.hospital[split["ood_val"]]) == {data.VAL_HOSPITAL}
     assert set(meta.hospital[split["train"]]) <= set(data.TRAIN_HOSPITALS)
+
+
+def test_every_training_hospital_is_represented_in_id_val():
+    meta = synthetic_meta()
+    split = data.make_official_split(meta, n_train=2000, n_id_val=900, n_ood_val=300, seed=2)
+    assert set(meta.hospital[split["id_val"]]) == set(data.TRAIN_HOSPITALS)
