@@ -106,3 +106,61 @@ def balanced_subset(meta: Meta, candidates, n: int, rng: np.random.Generator) ->
     out = np.concatenate(chosen)
     rng.shuffle(out)
     return out
+
+
+def _holdout_slides(meta: Meta, pool, frac: float, rng: np.random.Generator) -> set:
+    """Pick whole slides to hold out, at least one per hospital in the pool."""
+    pool = np.asarray(pool)
+    held = set()
+    for h in np.unique(meta.hospital[pool]):
+        slides = np.unique(meta.slide_key[pool[meta.hospital[pool] == h]])
+        n_hold = max(1, int(round(frac * len(slides))))
+        n_hold = min(n_hold, max(len(slides) - 1, 0))
+        if n_hold == 0:
+            continue
+        held.update(rng.choice(slides, size=n_hold, replace=False).tolist())
+    return held
+
+
+def _make_split(meta, pool, ood_pool, n_train, n_id_val, n_ood_val, holdout_frac, rng, test_pool=None, n_test=None):
+    pool = np.asarray(pool)
+    held = _holdout_slides(meta, pool, holdout_frac, rng)
+    is_held = np.isin(meta.slide_key[pool], list(held))
+    train_pool, id_pool = pool[~is_held], pool[is_held]
+    out = {
+        "train": balanced_subset(meta, train_pool, n_train, rng),
+        "id_val": balanced_subset(meta, id_pool, n_id_val, rng),
+    }
+    if ood_pool is not None and len(ood_pool) > 0:
+        out["ood_val"] = balanced_subset(meta, ood_pool, n_ood_val, rng)
+    if test_pool is not None:
+        out["test"] = balanced_subset(meta, test_pool, n_test or n_ood_val, rng)
+    return out
+
+
+def make_official_split(
+    meta: Meta,
+    n_train: int = 40000,
+    n_id_val: int = 8000,
+    n_ood_val: int = 8000,
+    seed: int = 0,
+    holdout_frac: float = 0.2,
+    include_test: bool = False,
+    n_test: int | None = None,
+) -> dict:
+    """Official WILDS hospitals with our own slide-level held-out validation.
+
+    train   : slides from hospitals 0,3,4 (official train split), minus held-out slides
+    id_val  : held-out slides from the same hospitals ("seen hospital" check)
+    ood_val : the official validation hospital (1), used to choose settings
+    test    : the official test hospital (2), only returned if include_test=True
+    """
+    rng = np.random.default_rng(seed)
+    pool = np.where(
+        np.isin(meta.hospital, TRAIN_HOSPITALS) & (meta.split == meta.split_dict["train"])
+    )[0]
+    ood_pool = np.where(meta.hospital == VAL_HOSPITAL)[0]
+    test_pool = np.where(meta.hospital == TEST_HOSPITAL)[0] if include_test else None
+    split = _make_split(meta, pool, ood_pool, n_train, n_id_val, n_ood_val, holdout_frac, rng, test_pool, n_test)
+    check_split(meta, split, test_hospitals=(TEST_HOSPITAL,), allow_test=include_test)
+    return split
