@@ -194,3 +194,32 @@ def make_loho_split(
     split = _make_split(meta, pool, ood_pool, n_train, n_id_val, n_ood_val, holdout_frac, rng, test_pool, n_test)
     check_split(meta, split, test_hospitals=(test_hospital,), allow_test=include_test)
     return split
+
+
+def check_split(meta: Meta, split: dict, test_hospitals=(TEST_HOSPITAL,), allow_test: bool = False) -> dict:
+    """Raise if the split leaks. Returns a small summary for logging."""
+    sk = meta.slide_key
+    if shared_slides(meta, split["train"], split["id_val"]):
+        raise AssertionError("slide shared between train and id_val")
+    if "ood_val" in split and shared_slides(meta, split["train"], split["ood_val"]):
+        raise AssertionError("slide shared between train and ood_val")
+    names = ["train", "id_val"] + (["ood_val"] if "ood_val" in split else [])
+    if not allow_test:
+        for name in names + (["test"] if "test" in split else []):
+            if np.isin(meta.hospital[split[name]], list(test_hospitals)).any():
+                raise AssertionError(f"test hospital data found in {name}")
+        if "test" in split:
+            raise AssertionError("test split present but allow_test is False")
+    else:
+        for name in names:
+            if np.isin(meta.hospital[split[name]], list(test_hospitals)).any():
+                raise AssertionError(f"test hospital data found in {name}")
+    summary = {}
+    for name, idx in split.items():
+        summary[name] = {
+            "n": int(len(idx)),
+            "tumor_frac": float(meta.y[idx].mean()) if len(idx) else float("nan"),
+            "slides": int(len(set(sk[idx]))),
+            "hospitals": sorted(set(meta.hospital[idx].tolist())),
+        }
+    return summary
