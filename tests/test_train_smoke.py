@@ -57,3 +57,9 @@ def test_same_seed_gives_same_loss():
     a = train.run_method(make_data(), cfg)
     b = train.run_method(make_data(), cfg)
     assert abs(a["history"][0]["loss"] - b["history"][0]["loss"]) < 1e-5
+
+
+def test_unknown_method_is_rejected():
+    with pytest.raises(ValueError):
+        train.train_model(np.zeros((4, 96, 96, 3), np.uint8), np.zeros(4, np.int64),
+                          train.Config(method="nope", pretrained=False), train.get_device())
