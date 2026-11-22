@@ -24,3 +24,50 @@ def best_threshold(y: np.ndarray, p: np.ndarray) -> float:
     k = int(np.argmax(j))
     t = float(thr[k])
     return 0.5 if not np.isfinite(t) else t
+
+
+def metrics(y: np.ndarray, p: np.ndarray, thr: float = 0.5) -> dict:
+    y, p = np.asarray(y).astype(int), np.asarray(p)
+    pred = (p >= thr).astype(int)
+    tp = int(((pred == 1) & (y == 1)).sum())
+    tn = int(((pred == 0) & (y == 0)).sum())
+    fp = int(((pred == 1) & (y == 0)).sum())
+    fn = int(((pred == 0) & (y == 1)).sum())
+    out = {
+        "n": int(len(y)),
+        "acc": (tp + tn) / max(len(y), 1),
+        "sens": tp / (tp + fn) if (tp + fn) else float("nan"),
+        "spec": tn / (tn + fp) if (tn + fp) else float("nan"),
+        "auc": float(roc_auc_score(y, p)) if len(np.unique(y)) == 2 else float("nan"),
+    }
+    return out
+
+
+def evaluate_groups(y, p, hospital, thr: float) -> dict:
+    """Metrics overall ('all') and for each hospital ('h<id>')."""
+    y, p, hospital = np.asarray(y), np.asarray(p), np.asarray(hospital)
+    out = {"all": metrics(y, p, thr)}
+    for h in np.unique(hospital):
+        m = hospital == h
+        out[f"h{int(h)}"] = metrics(y[m], p[m], thr)
+    return out
+
+
+def gap(id_metrics: dict, ood_metrics: dict) -> dict:
+    """In-distribution minus out-of-distribution for each metric (positive = worse on unseen)."""
+    return {k: id_metrics[k] - ood_metrics[k] for k in METRICS}
+
+
+def aggregate(results: list[dict]) -> dict:
+    """Mean and std over seeds of the overall ID / OOD metrics and the gaps."""
+    rows = {}
+    for split in ("id_val", "ood_val", "test"):
+        if all(split in r["groups"] for r in results):
+            for k in METRICS:
+                v = np.array([r["groups"][split]["all"][k] for r in results], dtype=float)
+                rows[f"{split}_{k}"] = (float(np.nanmean(v)), float(np.nanstd(v)))
+    if all("gap" in r for r in results):
+        for k in METRICS:
+            v = np.array([r["gap"][k] for r in results], dtype=float)
+            rows[f"gap_{k}"] = (float(np.nanmean(v)), float(np.nanstd(v)))
+    return rows
