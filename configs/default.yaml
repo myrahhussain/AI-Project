@@ -1,0 +1,17 @@
+# Interim experiment settings (shrink n_train / epochs if the Colab speed test says so)
+split:
+  n_train: 40000
+  n_id_val: 8000
+  n_ood_val: 8000
+  holdout_frac: 0.2
+  seed: 0
+train:
+  epochs: 5
+  batch_size: 128
+  lr: 0.0003
+  weight_decay: 0.0001
+  sigma: 0.1
+  amp: true
+  threshold_source: id_val
+seeds: [0, 1, 2]
+methods: [baseline, hed, vahadane, both]
