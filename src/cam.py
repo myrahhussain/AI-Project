@@ -1,6 +1,6 @@
 """Class activation maps for the ResNet-18 patch classifier.
 
-Stage 2: Grad-CAM and LayerCAM, selectable layer, and a multi-layer fusion.
+Grad-CAM and LayerCAM with selectable layer, a fused map from the finer layers, and an overlay helper.
 At 96x96 input the last ResNet stage (layer4) is only 3x3, so its maps are very
 coarse; layer2 (12x12) and layer3 (6x6) localise better.
 """
@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as F
 
 LAYERS = ("backbone.layer2", "backbone.layer3", "backbone.layer4")
+FINE_LAYERS = ("backbone.layer2", "backbone.layer3")   # layer4 is 3x3 at 96x96: too coarse to localise
 
 
 def _layer(model, name: str):
@@ -52,6 +53,15 @@ def compute_cam(model, x: torch.Tensor, layer_name: str = "backbone.layer4", met
     return _normalise(cam)
 
 
-def fused_layercam(model, x: torch.Tensor, layers=LAYERS) -> torch.Tensor:
-    """Average of per-layer LayerCAMs (each normalised first)."""
+def fused_layercam(model, x: torch.Tensor, layers=FINE_LAYERS) -> torch.Tensor:
+    """Average of per-layer LayerCAMs (each normalised first). Defaults to the finer layers."""
     return _normalise(torch.stack([compute_cam(model, x, l, "layercam") for l in layers]).mean(dim=0))
+
+
+def overlay(img_uint8, cam_map, alpha: float = 0.45):
+    """Blend a CAM (H, W in [0, 1]) over an RGB uint8 image (H, W, 3). Returns uint8 (H, W, 3)."""
+    import numpy as np
+    from matplotlib import colormaps
+    heat = colormaps["inferno"](np.asarray(cam_map))[..., :3]
+    out = (1 - alpha) * (np.asarray(img_uint8) / 255.0) + alpha * heat
+    return (out.clip(0, 1) * 255).astype(np.uint8)
