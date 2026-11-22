@@ -82,3 +82,41 @@ def test_background_pixels_are_unchanged_and_output_is_uint8():
     out = N.StainNormalizer().fit(ref).transform(src)
     assert out.dtype == np.uint8 and out.shape == src.shape
     assert np.array_equal(out[:20, :20], src[:20, :20])
+
+
+def test_fallbacks_do_not_crash():
+    ref = render(make_concentrations(seed=9), W_C)
+    norm = N.StainNormalizer().fit(ref)
+    white = np.full((96, 96, 3), 255, np.uint8)
+    assert np.array_equal(norm.transform(white), white)
+    tiny = white.copy()
+    tiny[:3, :3] = [120, 60, 150]
+    out = norm.transform(tiny)
+    assert out.shape == tiny.shape and out.dtype == np.uint8
+    flat = np.full((96, 96, 3), 128, np.uint8)  # grey: not a stain mixture
+    assert norm.transform(flat).shape == flat.shape
+
+
+def test_slide_mode_reduces_slide_to_slide_colour_difference():
+    ref = render(make_concentrations(seed=9), W_C)
+    norm = N.StainNormalizer().fit(ref)
+    patches, slides = [], []
+    for s, w in enumerate((W_A, W_B)):
+        for k in range(6):
+            patches.append(render(make_concentrations(seed=20 + k), w))
+            slides.append(s)
+    x, slides = np.stack(patches), np.array(slides)
+    out = norm.transform_batch(x, slides, mode="slide")
+    mean_color = lambda arr, s: arr[slides == s].reshape(-1, 3).mean(0)
+    before = np.abs(mean_color(x, 0) - mean_color(x, 1)).sum()
+    after = np.abs(mean_color(out, 0) - mean_color(out, 1)).sum()
+    assert after < 0.4 * before
+
+
+def test_patch_mode_matches_batch_shape_and_is_deterministic():
+    ref = render(make_concentrations(seed=9), W_C)
+    norm = N.StainNormalizer().fit(ref)
+    x = np.stack([render(make_concentrations(seed=s), W_B) for s in range(3)])
+    a = norm.transform_batch(x, mode="patch")
+    b = norm.transform_batch(x, mode="patch")
+    assert a.shape == x.shape and np.array_equal(a, b)
