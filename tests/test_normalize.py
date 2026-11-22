@@ -55,3 +55,30 @@ def test_stain_order_is_haematoxylin_first():
     img = render(make_concentrations(), W_B)
     w, _ = N.estimate_stain_matrix(N.rgb_to_od(img[N.tissue_mask(img)]))
     assert w[0, 0] / w[0, 1] > w[1, 0] / w[1, 1]
+
+
+def test_normalization_makes_differently_stained_copies_agree():
+    conc = make_concentrations(seed=1)
+    a, b = render(conc, W_A), render(conc, W_B)
+    ref = render(make_concentrations(seed=9), W_C)
+    norm = N.StainNormalizer().fit(ref)
+    na, nb = norm.transform(a), norm.transform(b)
+    before, after = mean_abs(a, b), mean_abs(na, nb)
+    assert before > 5
+    assert after < 0.25 * before  # observed ~0.1 across stain-style pairs
+
+
+def test_normalized_colours_move_towards_reference():
+    conc = make_concentrations(seed=2)            # same tissue, different stain colours
+    ref, src = render(conc, W_C), render(conc, W_B)
+    norm = N.StainNormalizer().fit(ref)
+    out = norm.transform(src)
+    assert mean_abs(out, ref) < 0.25 * mean_abs(src, ref)  # observed ~0.1
+
+
+def test_background_pixels_are_unchanged_and_output_is_uint8():
+    ref = render(make_concentrations(seed=9), W_C)
+    src = render(make_concentrations(seed=2), W_B)
+    out = N.StainNormalizer().fit(ref).transform(src)
+    assert out.dtype == np.uint8 and out.shape == src.shape
+    assert np.array_equal(out[:20, :20], src[:20, :20])
