@@ -33,3 +33,18 @@ def test_cam_figure_is_written(tmp_path):
     out = tmp_path / "f.png"
     failure.cam_figure(x, idx, cams, probs, str(out), "test")
     assert out.exists() and out.stat().st_size > 1000
+
+
+def test_analyze_end_to_end_on_tiny_models(tmp_path):
+    import torch
+    from src.models import make_model
+    rng = np.random.default_rng(0)
+    x = (rng.random((40, 96, 96, 3)) * 255).astype(np.uint8)
+    y = (rng.random(40) < 0.5).astype(int)
+    slide = rng.integers(0, 4, 40)
+    torch.manual_seed(0)
+    models = {"baseline": make_model(False), "hed": make_model(False)}
+    s = failure.analyze(x, y, slide, models, {"baseline": 0.5, "hed": 0.5}, str(tmp_path), n_show=3)
+    assert set(s["counts"]) == {"baseline", "hed"}
+    assert len(s["worst_slides"]) <= 4 and "hed_fixes_baseline_fp" in s
+    assert any(f.name.endswith("_cams.png") for f in tmp_path.iterdir())

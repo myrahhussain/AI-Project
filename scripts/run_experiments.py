@@ -21,7 +21,7 @@ def load_split(dataset, meta, split, cache):
 def normalise_all(raw, cache):
     """Stain-normalise every split to one reference patch from the TRAINING hospitals."""
     norm = normalize.StainNormalizer()
-    ref = choose_ref = normalize.choose_reference(raw["train"][0])
+    ref = normalize.choose_reference(raw["train"][0])
     norm.fit(raw["train"][0][ref])
     out = {}
     for name, (x, y, h, s) in raw.items():
@@ -43,6 +43,7 @@ def main():
     p.add_argument("--epochs", type=int, default=5); p.add_argument("--batch_size", type=int, default=128)
     p.add_argument("--sigma", type=float, default=0.1); p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     p.add_argument("--methods", nargs="+", default=list(train.METHODS)); p.add_argument("--tag", default="interim")
+    p.add_argument("--ckpt_dir", default=None, help="save model weights here (needed for failure analysis)")
     a = p.parse_args()
     from wilds import get_dataset
     ds = get_dataset(dataset="camelyon17", download=False, root_dir=a.root)
@@ -61,7 +62,7 @@ def main():
             f = os.path.join(a.out, f"{a.tag}_{method}_seed{seed}.json")
             if os.path.exists(f): print("skip (done)", f); continue
             cfg = train.Config(method=method, seed=seed, epochs=a.epochs, batch_size=a.batch_size, sigma=a.sigma)
-            train.run_method(d, cfg, out_dir=a.out, tag=a.tag)
+            train.run_method(d, cfg, out_dir=a.out, tag=a.tag, ckpt_dir=a.ckpt_dir)
     from src import evaluate
     print(evaluate.summary_table(a.out, a.tag).to_string())
 

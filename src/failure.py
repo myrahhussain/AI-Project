@@ -46,9 +46,10 @@ def cam_figure(x_uint8, idx, cams: dict, probs: dict, out: str, title: str = "")
             ax[r, c].imshow(overlay(x_uint8[i], cams[n][r])); ax[r, c].axis("off")
             ax[r, c].set_title(f"{n} p={probs[n][i]:.2f}", fontsize=8)
     ax[0, 0].set_title("original", fontsize=8)
+    fig.tight_layout(rect=(0, 0, 1, 0.985 if title else 1.0))   # leave room so the title sits above the column headers
     if title:
-        fig.suptitle(title, fontsize=10)
-    fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
+        fig.suptitle(title, fontsize=10, y=0.998)
+    fig.savefig(out, dpi=150); plt.close(fig)
 
 
 def analyze(x_uint8, y, slide, models: dict, thresholds: dict, out_dir: str, n_show: int = 12, device="cpu"):
