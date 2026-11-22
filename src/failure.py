@@ -49,3 +49,41 @@ def cam_figure(x_uint8, idx, cams: dict, probs: dict, out: str, title: str = "")
     if title:
         fig.suptitle(title, fontsize=10)
     fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
+
+
+def analyze(x_uint8, y, slide, models: dict, thresholds: dict, out_dir: str, n_show: int = 12, device="cpu"):
+    """Compare methods on one evaluation set (e.g. the unseen hospital).
+
+    models / thresholds: {method: model} / {method: decision threshold chosen on validation data}.
+    Writes cam figures for false positives and false negatives of the FIRST method (the baseline)
+    and returns a summary dict. CAMs are LayerCAM from the finer layers: a way to investigate
+    failures, not proof of what the model 'reasons'.
+    """
+    import os
+    import torch
+    from . import cam as camlib
+    from .train import predict
+
+    os.makedirs(out_dir, exist_ok=True)
+    names = list(models)
+    probs = {n: predict(models[n], x_uint8, device) for n in names}
+    errs = {n: error_sets(y, probs[n], thresholds[n]) for n in names}
+    base = names[0]
+    summary = {"counts": {n: {"fp": int(len(e["fp"])), "fn": int(len(e["fn"]))} for n, e in errs.items()},
+               "worst_slides": slide_error_table(y, probs[base], slide, thresholds[base])[:5]}
+    for n in names[1:]:
+        summary[f"{n}_fixes_baseline_fp"] = fixed_fraction(errs[base]["fp"], errs[n]["fp"])
+        summary[f"{n}_fixes_baseline_fn"] = fixed_fraction(errs[base]["fn"], errs[n]["fn"])
+    for kind in ("fp", "fn"):
+        idx = errs[base][kind]
+        if len(idx) == 0:
+            continue
+        # most confident mistakes first
+        order = np.argsort(-probs[base][idx] if kind == "fp" else probs[base][idx])
+        idx = idx[order][:n_show]
+        t = torch.from_numpy(x_uint8[idx]).permute(0, 3, 1, 2).float().div(255).to(device)
+        cams = {n: camlib.fused_layercam(models[n].to(device), t).cpu().numpy() for n in names}
+        label = "false positives (healthy called tumour)" if kind == "fp" else "false negatives (missed tumour)"
+        cam_figure(x_uint8, idx, cams, probs, os.path.join(out_dir, f"{base}_{kind}_cams.png"),
+                   f"{label}: baseline errors, same patches under each method")
+    return summary
