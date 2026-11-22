@@ -26,3 +26,7 @@ class PatchClassifier(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.backbone((x - self.mean) / self.std).squeeze(1)  # logits, shape (N,)
+
+
+def make_model(pretrained: bool = True) -> PatchClassifier:
+    return PatchClassifier(pretrained)
