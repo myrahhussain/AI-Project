@@ -71,3 +71,29 @@ def aggregate(results: list[dict]) -> dict:
             v = np.array([r["gap"][k] for r in results], dtype=float)
             rows[f"gap_{k}"] = (float(np.nanmean(v)), float(np.nanstd(v)))
     return rows
+
+
+def load_results(results_dir: str, tag: str | None = None) -> dict:
+    """Group saved per-run JSON files by method."""
+    by_method: dict[str, list[dict]] = {}
+    pattern = f"{tag}_*.json" if tag else "*.json"
+    for f in sorted(glob.glob(os.path.join(results_dir, pattern))):
+        with open(f) as fh:
+            r = json.load(fh)
+        if "method" in r and "groups" in r:
+            by_method.setdefault(r["method"], []).append(r)
+    return by_method
+
+
+def summary_table(results_dir: str, tag: str | None = None):
+    """pandas DataFrame: one row per method, 'mean ± std' over seeds."""
+    import pandas as pd
+
+    rows = []
+    for method, rs in load_results(results_dir, tag).items():
+        agg = aggregate(rs)
+        row = {"method": method, "seeds": len(rs)}
+        for k, (m, s) in agg.items():
+            row[k] = f"{m:.3f} ± {s:.3f}"
+        rows.append(row)
+    return pd.DataFrame(rows)
