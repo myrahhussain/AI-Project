@@ -39,3 +39,17 @@ def test_per_hospital_groups_and_gap():
     assert g["h0"]["acc"] == 1.0 and g["h1"]["acc"] == 0.0
     gp = evaluate.gap(g["h0"], g["h1"])
     assert gp["acc"] == 1.0
+
+
+def test_aggregate_and_summary_table(tmp_path):
+    def fake(seed, id_acc, ood_acc):
+        grp = lambda a: {"all": {"n": 10, "acc": a, "sens": a, "spec": a, "auc": a}}
+        return {"method": "baseline", "seed": seed, "groups": {"id_val": grp(id_acc), "ood_val": grp(ood_acc)},
+                "gap": {k: id_acc - ood_acc for k in evaluate.METRICS}}
+    for s, (a, b) in enumerate([(0.9, 0.7), (0.92, 0.68), (0.88, 0.72)]):
+        (tmp_path / f"t_baseline_seed{s}.json").write_text(json.dumps(fake(s, a, b)))
+    agg = evaluate.aggregate(evaluate.load_results(str(tmp_path))["baseline"])
+    assert abs(agg["id_val_acc"][0] - 0.9) < 1e-9
+    assert abs(agg["gap_acc"][0] - 0.2) < 1e-9
+    df = evaluate.summary_table(str(tmp_path))
+    assert len(df) == 1 and df.loc[0, "seeds"] == 3
