@@ -120,3 +120,21 @@ def test_patch_mode_matches_batch_shape_and_is_deterministic():
     a = norm.transform_batch(x, mode="patch")
     b = norm.transform_batch(x, mode="patch")
     assert a.shape == x.shape and np.array_equal(a, b)
+
+
+def test_choose_reference_returns_valid_index_with_tissue():
+    x = np.stack([render(make_concentrations(seed=s), W_A) for s in range(10)])
+    i = N.choose_reference(x, n_candidates=10)
+    assert 0 <= i < 10
+    assert N.tissue_mask(x[i]).mean() > 0.6
+
+
+def test_estimate_is_robust_to_pixel_noise():
+    rng = np.random.default_rng(0)
+    conc = make_concentrations(seed=4)
+    for w_true in (W_A, W_B):
+        img = render(conc, w_true).astype(float) + rng.normal(0, 3, (96, 96, 3))
+        img = np.clip(img, 0, 255).astype(np.uint8)
+        w, ok = N.estimate_stain_matrix(N.rgb_to_od(img[N.tissue_mask(img)]))
+        assert ok
+        assert cos(w[0], w_true[0]) > 0.97 and cos(w[1], w_true[1]) > 0.97
