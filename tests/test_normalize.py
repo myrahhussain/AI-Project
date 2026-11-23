@@ -138,3 +138,17 @@ def test_estimate_is_robust_to_pixel_noise():
         w, ok = N.estimate_stain_matrix(N.rgb_to_od(img[N.tissue_mask(img)]))
         assert ok
         assert cos(w[0], w_true[0]) > 0.97 and cos(w[1], w_true[1]) > 0.97
+
+
+def test_choose_reference_avoids_pale_outliers():
+    """Twelve typical patches and three pale ones with weak haematoxylin: the reference must be typical."""
+    typical, pale = [], []
+    for s in range(12):
+        typical.append(render(make_concentrations(seed=s), W_A))
+    for s in range(12, 15):
+        c = make_concentrations(seed=s)
+        c[..., 0] *= 0.3                       # weak haematoxylin, nuclei barely stained
+        pale.append(render(c, W_A))
+    x = np.stack(typical + pale)
+    for seed in range(3):
+        assert N.choose_reference(x, n_candidates=15, seed=seed) < 12

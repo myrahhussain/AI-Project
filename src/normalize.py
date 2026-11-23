@@ -200,25 +200,29 @@ class StainNormalizer:
 
 
 def choose_reference(x: np.ndarray, n_candidates: int = 50, seed: int = 0, lum_thresh: float = 0.8) -> int:
-    """Index of a reasonable reference patch: plenty of tissue, both stains present.
+    """Index of a *typical* reference patch from the training hospitals.
 
-    Pass ONLY training-hospital patches. Candidate selection is unsupervised
-    (no labels, no test hospital); the final reference can be compared on the
-    validation hospital.
+    Candidates need plenty of tissue and a trustworthy stain estimate. Among them we pick the one
+    closest to the median stain colours and median stain intensities, so the reference is neither an
+    unusually pale patch nor an extreme one. (An earlier rule that preferred patches with balanced H and E
+    picked pale, eosin-heavy patches, which washed out the nuclei in every normalised image.)
+
+    Pass ONLY training-hospital patches. The choice uses no labels and never sees the test hospital.
     """
     rng = np.random.default_rng(seed)
     cand = rng.choice(len(x), min(n_candidates, len(x)), replace=False)
-    best, best_score = int(cand[0]), -1.0
     norm = StainNormalizer()
+    found = []
     for i in cand:
-        m = tissue_mask(x[i], lum_thresh)
-        if m.mean() < 0.6:
+        if tissue_mask(x[i], lum_thresh).mean() < 0.6:
             continue
         w, maxc, ok = norm.estimate([x[i]])
         if maxc is None or not ok:
             continue
-        # prefer images where both stains are clearly present
-        score = float(m.mean() * min(maxc) / max(maxc))
-        if score > best_score:
-            best, best_score = int(i), score
-    return best
+        found.append((int(i), np.asarray(w, dtype=float), np.log(np.maximum(np.asarray(maxc, dtype=float), 1e-6))))
+    if not found:
+        return int(cand[0])
+    med_w = np.median([f[1] for f in found], axis=0)
+    med_c = np.median([f[2] for f in found], axis=0)
+    dist = [np.linalg.norm(w - med_w) + np.abs(c - med_c).sum() for _, w, c in found]
+    return found[int(np.argmin(dist))][0]
