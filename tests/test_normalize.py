@@ -152,3 +152,25 @@ def test_choose_reference_avoids_pale_outliers():
     x = np.stack(typical + pale)
     for seed in range(3):
         assert N.choose_reference(x, n_candidates=15, seed=seed) < 12
+
+
+def test_saturated_dark_pixels_do_not_wash_out_a_slide():
+    """Real slides can have a few percent of near-black pixels (very dark nuclei, debris). Those sit at the
+    clipping floor and must not set the slide's stain-strength estimate: the slide would be scaled down
+    and come out pale (seen on real Camelyon17 slides)."""
+    rng = np.random.default_rng(0)
+    clean = np.stack([render(make_concentrations(seed=s), W_A) for s in range(8)])
+    dark = clean.copy()
+    for img in dark:
+        mask = rng.random(img.shape[:2]) < 0.04          # 4% of pixels saturated
+        img[mask] = [4, 2, 8]
+    ref = N.StainNormalizer().fit(render(make_concentrations(seed=99), W_A))
+    slides = np.zeros(len(clean), dtype=int)
+    out_clean = ref.transform_batch(clean, slides, mode="slide").astype(float)
+    out_dark = ref.transform_batch(dark, slides, mode="slide").astype(float)
+    keep = (dark.min(axis=-1) > 10)                       # unsaturated pixels only
+    lum = lambda a: a @ np.array([0.299, 0.587, 0.114])
+    # nuclei are the darkest tissue: they must stay dark, not wash out
+    dark_clean = np.percentile(lum(out_clean)[keep], 5)
+    dark_sat = np.percentile(lum(out_dark)[keep], 5)
+    assert abs(dark_clean - dark_sat) < 15, (dark_clean, dark_sat)

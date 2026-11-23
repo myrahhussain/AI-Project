@@ -112,11 +112,15 @@ class StainNormalizer:
         min_tissue_px: int = 200,
         max_px: int = 20000,
         n_iter: int = 300,
-        percentile: float = 99.0,
+        percentile: float = 95.0,
         seed: int = 0,
+        od_floor: float = 20.0,
     ):
         self.lam, self.lum_thresh, self.min_tissue_px = lam, lum_thresh, min_tissue_px
         self.max_px, self.n_iter, self.percentile, self.seed = max_px, n_iter, percentile, seed
+        # estimation ignores pixels darker than this, so saturated near-black
+        # pixels cannot inflate the slide's stain-strength estimate
+        self.od_floor = od_floor
         self.w_ref: np.ndarray | None = None
         self.maxc_ref: np.ndarray | None = None
 
@@ -126,7 +130,7 @@ class StainNormalizer:
         for img in imgs:
             m = tissue_mask(img, self.lum_thresh)
             if m.any():
-                parts.append(rgb_to_od(img[m]))
+                parts.append(-np.log(np.maximum(img[m].astype(np.float64), self.od_floor) / 255.0))
         return np.concatenate(parts) if parts else np.zeros((0, 3))
 
     def estimate(self, imgs):
