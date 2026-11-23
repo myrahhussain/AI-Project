@@ -122,3 +122,25 @@ def test_load_cached_patches_reads_raw_and_normalised_caches(tmp_path):
     assert (data.load_cached_patches(str(tmp_path), "train_norm") == x[::-1]).all()
     with pytest.raises(FileNotFoundError):
         data.load_cached_patches(str(tmp_path), "ood_val")
+
+
+def test_load_patches_uses_its_cache_on_the_second_call(tmp_path):
+    import numpy as np
+    from PIL import Image
+    from src import data
+
+    class FakeDataset:
+        calls = 0
+        def get_input(self, i):
+            FakeDataset.calls += 1
+            return Image.fromarray(np.full((96, 96, 3), i % 255, dtype=np.uint8))
+
+    ds, idx = FakeDataset(), np.array([3, 5, 7])
+    path = str(tmp_path / "train.npy")
+    a = data.load_patches(ds, idx, cache_path=path)
+    first = FakeDataset.calls
+    b = data.load_patches(ds, idx, cache_path=path)
+    assert first == 3 and FakeDataset.calls == 3      # second call read the cache, not the dataset
+    assert (a == b).all()
+    c = data.load_patches(ds, np.array([3, 5, 8]), cache_path=path)   # different indices: must reload
+    assert FakeDataset.calls == 6 and c.shape == (3, 96, 96, 3)

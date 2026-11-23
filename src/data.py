@@ -228,6 +228,8 @@ def check_split(meta: Meta, split: dict, test_hospitals=(TEST_HOSPITAL,), allow_
 def load_patches(dataset, idx, cache_path: str | None = None, workers: int = 8) -> np.ndarray:
     """Read patches into a uint8 array (N, 96, 96, 3). Optionally cached on disk."""
     idx = np.asarray(idx)
+    if cache_path and not cache_path.endswith(".npz"):
+        cache_path += ".npz"          # np.savez appends .npz, so check and save under that name
     if cache_path and os.path.exists(cache_path):
         z = np.load(cache_path)
         if np.array_equal(z["idx"], idx):
