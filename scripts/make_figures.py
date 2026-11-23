@@ -40,7 +40,7 @@ def norm_grid(raw, norm, titles, out):
     fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
 
 
-def results_chart(results_dir, out, tag="interim"):
+def results_chart(results_dir, out, tag="interim", zoom=False):
     runs = {}
     for f in sorted(glob.glob(os.path.join(results_dir, f"{tag}_*.json"))):
         r = json.load(open(f)); runs.setdefault(r["method"], []).append(r)
@@ -52,10 +52,12 @@ def results_chart(results_dir, out, tag="interim"):
         vals = [[r["groups"]["ood_val"]["all"][key] for r in runs[m]] for m in order]
         mean = [np.mean(v) for v in vals]; sd = [np.std(v) for v in vals]
         ax.bar(order, mean, yerr=sd, color=[COLORS[m] for m in order], capsize=4)
-        for i, m in enumerate(mean): ax.text(i, m + 0.004, f"{m:.3f}", ha="center", fontsize=9)
-        ax.set_ylim(min(mean) - 0.06, min(1.0, max(mean) + 0.04)); ax.set_title(title, fontsize=11)
+        for i, m in enumerate(mean): ax.text(i, m + sd[i] + 0.012, f"{m:.3f}", ha="center", fontsize=9)
+        # honest default: the axis starts at 0 so small gaps look small; --zoom magnifies them
+        ax.set_ylim((min(mean) - 0.06, min(1.0, max(mean) + 0.04)) if zoom else (0, 1.08)); ax.set_title(title, fontsize=11)
+        if not zoom: ax.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
         ax.spines[["top", "right"]].set_visible(False)
-    fig.suptitle("Mean over seeds, error bars = std (zoomed y-axis)", fontsize=9, y=0.03)
+    fig.suptitle("Mean over seeds, error bars = std (" + ("zoomed y-axis)" if zoom else "y-axis starts at 0)"), fontsize=9, y=0.05)
     fig.tight_layout(rect=(0, 0.12, 1, 1)); fig.savefig(out, dpi=150); plt.close(fig)
 
 
@@ -63,6 +65,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--cache", required=True); p.add_argument("--results", required=True)
     p.add_argument("--out", default="figures"); p.add_argument("--tag", default="interim"); p.add_argument("--n", type=int, default=6)
+    p.add_argument("--zoom", action="store_true", help="zoom the y-axis of the results chart")
     a = p.parse_args(); os.makedirs(a.out, exist_ok=True)
     load = lambda name: data.load_cached_patches(a.cache, name)
     tr = load("train"); idx = pick(len(tr), a.n)
@@ -76,5 +79,5 @@ if __name__ == "__main__":
             ii = pick(len(raw), a.n, seed=1)
             norm_grid([raw[i] for i in ii], [nrm[i] for i in ii], [title] * a.n,
                       os.path.join(a.out, f"normalization_{split}.png"))
-    results_chart(a.results, os.path.join(a.out, "results_unseen_hospital.png"), a.tag)
+    results_chart(a.results, os.path.join(a.out, "results_unseen_hospital.png"), a.tag, zoom=a.zoom)
     print("saved:", sorted(os.listdir(a.out)))

@@ -2,7 +2,9 @@
 
   python scripts/download_outputs.py --dirs <figures dir> <failure_analysis dir> --name outputs
 or in a cell:  from scripts.download_outputs import make_zip; ...
-In Colab the browser then downloads <name>.zip. Outside Colab it just writes the zip.
+The zip is written next to --out_dir. Colab can only start a browser download from a notebook cell
+(not from a `!python` subprocess), so after running this, run in a cell:
+    from google.colab import files; files.download("<name>.zip")
 """
 import argparse, os, shutil, sys, tempfile
 
@@ -31,5 +33,8 @@ if __name__ == "__main__":
     try:
         from google.colab import files
         files.download(z)
-    except ImportError:
-        print("Not running in Colab: zip left at", z)
+    except (ImportError, AttributeError):
+        # AttributeError: running as a subprocess (`!python ...`), where Colab has no notebook kernel
+        print("Zip is ready at", z)
+        print("To download it in Colab, run this in a notebook cell:")
+        print(f'    from google.colab import files; files.download("{os.path.abspath(z)}")')
