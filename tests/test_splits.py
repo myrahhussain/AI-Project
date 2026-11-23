@@ -109,3 +109,16 @@ def test_check_split_catches_injected_leaks():
     bad2["ood_val"] = np.concatenate([split["ood_val"], test_idx])
     with pytest.raises(AssertionError):
         data.check_split(meta, bad2)
+
+
+def test_load_cached_patches_reads_raw_and_normalised_caches(tmp_path):
+    import numpy as np
+    import pytest
+    from src import data
+    x = np.random.default_rng(0).integers(0, 255, (3, 96, 96, 3)).astype(np.uint8)
+    np.savez(str(tmp_path / "train.npy"), x=x, idx=np.arange(3))          # how load_patches saves raw patches
+    np.save(str(tmp_path / "train_norm.npy"), x[::-1])                     # how normalised arrays are saved
+    assert (data.load_cached_patches(str(tmp_path), "train") == x).all()
+    assert (data.load_cached_patches(str(tmp_path), "train_norm") == x[::-1]).all()
+    with pytest.raises(FileNotFoundError):
+        data.load_cached_patches(str(tmp_path), "ood_val")

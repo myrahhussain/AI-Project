@@ -242,3 +242,17 @@ def load_patches(dataset, idx, cache_path: str | None = None, workers: int = 8) 
     if cache_path:
         np.savez(cache_path, x=x, idx=idx)
     return x
+
+
+def load_cached_patches(cache_dir: str, name: str) -> np.ndarray:
+    """Load patches cached by the experiment run.
+
+    Raw patches are stored by `load_patches` as '<name>.npy.npz' (array 'x'); stain-normalised
+    arrays are plain '<name>.npy'. `name` is e.g. 'train', 'ood_val' or 'train_norm'.
+    """
+    for fname, packed in ((f"{name}.npy.npz", True), (f"{name}.npz", True), (f"{name}.npy", False)):
+        path = os.path.join(cache_dir, fname)
+        if os.path.exists(path):
+            z = np.load(path)
+            return z["x"] if packed else z
+    raise FileNotFoundError(f"no cached patches named '{name}' in {cache_dir}; found: {sorted(os.listdir(cache_dir))}")
