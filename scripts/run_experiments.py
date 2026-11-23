@@ -41,7 +41,7 @@ def main():
     p.add_argument("--root", default="data"); p.add_argument("--cache", default=None); p.add_argument("--out", default="results")
     p.add_argument("--n_train", type=int, default=40000); p.add_argument("--n_eval", type=int, default=8000)
     p.add_argument("--epochs", type=int, default=5); p.add_argument("--batch_size", type=int, default=128)
-    p.add_argument("--sigma", type=float, default=0.1); p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
+    p.add_argument("--sigma", type=float, default=0.2); p.add_argument("--hed_mode", default="relative", choices=["relative", "absolute"]); p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     p.add_argument("--methods", nargs="+", default=list(train.METHODS)); p.add_argument("--tag", default="interim")
     p.add_argument("--ckpt_dir", default=None, help="save model weights here (needed for failure analysis)")
     a = p.parse_args()
@@ -61,7 +61,7 @@ def main():
         for seed in a.seeds:
             f = os.path.join(a.out, f"{a.tag}_{method}_seed{seed}.json")
             if os.path.exists(f): print("skip (done)", f); continue
-            cfg = train.Config(method=method, seed=seed, epochs=a.epochs, batch_size=a.batch_size, sigma=a.sigma)
+            cfg = train.Config(method=method, seed=seed, epochs=a.epochs, batch_size=a.batch_size, sigma=a.sigma, hed_mode=a.hed_mode)
             train.run_method(d, cfg, out_dir=a.out, tag=a.tag, ckpt_dir=a.ckpt_dir)
     from src import evaluate
     print(evaluate.summary_table(a.out, a.tag).to_string())

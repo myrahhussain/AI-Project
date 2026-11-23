@@ -90,3 +90,33 @@ def test_flip_rot90_preserves_pixels_and_covers_all_eight_variants():
         assert torch.equal(torch.sort(y.flatten()).values, torch.sort(x[:1].flatten()).values)
         seen.add(tuple(y.flatten().tolist()))
     assert len(seen) == 8
+
+
+def _half_background():
+    """Left half white background, right half H&E-coloured tissue."""
+    x = torch.full((4, 3, 32, 32), 0.96)
+    x[:, :, :, 16:] = torch.tensor([0.60, 0.40, 0.65]).view(1, 3, 1, 1)
+    return x
+
+
+def test_relative_mode_keeps_background_white_and_changes_are_moderate():
+    x = _half_background()
+    y = augment.hed_augment(x, 0.3, torch.Generator().manual_seed(0), mode="relative")
+    bg_change = (y[:, :, :, :16] - x[:, :, :, :16]).abs().mean().item()
+    tissue_change = (y[:, :, :, 16:] - x[:, :, :, 16:]).abs().mean().item()
+    assert bg_change < 0.02                  # white stays white
+    assert 0.005 < tissue_change < 0.15      # tissue colour changes, but not destroyed
+
+
+def test_absolute_mode_is_much_stronger_than_relative_at_same_sigma():
+    """Documents why 'absolute' was replaced: raw additive shifts are huge in concentration units."""
+    x = _half_background()
+    rel = augment.hed_augment(x, 0.05, torch.Generator().manual_seed(0), mode="relative")
+    ab = augment.hed_augment(x, 0.05, torch.Generator().manual_seed(0), mode="absolute")
+    assert (ab - x).abs().mean() > 5 * (rel - x).abs().mean()
+
+
+def test_unknown_hed_mode_is_rejected():
+    import pytest
+    with pytest.raises(ValueError):
+        augment.hed_augment(_half_background(), 0.1, mode="nope")

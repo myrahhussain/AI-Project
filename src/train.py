@@ -35,7 +35,8 @@ class Config:
     batch_size: int = 128
     lr: float = 3e-4
     weight_decay: float = 1e-4
-    sigma: float = 0.1            # HED augmentation strength (used by 'hed' and 'both')
+    sigma: float = 0.2            # HED augmentation strength (used by 'hed' and 'both')
+    hed_mode: str = "relative"    # 'relative' (realistic) or 'absolute' (old, very strong)
     pretrained: bool = True
     amp: bool = True
     threshold_source: str = "id_val"   # 'id_val', 'ood_val' or 'fixed' (0.5): never the test hospital
@@ -87,7 +88,7 @@ def train_model(x: np.ndarray, y: np.ndarray, cfg: Config, device, log=print):
             yb = torch.from_numpy(y[idx]).float().to(device)
             xb = augment.flip_rot90(xb, gen)
             if use_hed:
-                xb = augment.hed_augment(xb, cfg.sigma, gen)   # float32, outside autocast
+                xb = augment.hed_augment(xb, cfg.sigma, gen, cfg.hed_mode)   # float32, outside autocast
             with torch.autocast(device_type=device.type, enabled=amp):
                 loss = loss_fn(model(xb).float(), yb)
             opt.zero_grad(set_to_none=True)
