@@ -24,7 +24,7 @@ def main():
     meta = data.load_meta(get_dataset(dataset="camelyon17", download=False, root_dir=a.root))
     split = data.make_official_split(meta, n_train=a.n_train, n_id_val=a.n_eval, n_ood_val=a.n_eval, seed=0, include_test=False)
     idx = split["ood_val"]
-    x = np.load(os.path.join(a.cache, "ood_val.npy"))
+    x = data.load_cached_patches(a.cache, "ood_val")
     assert len(x) == len(idx), f"cache has {len(x)} patches but the split has {len(idx)}: use the same --n_train/--n_eval as the run"
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     models, thr = {}, {}

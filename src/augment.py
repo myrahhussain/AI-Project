@@ -46,22 +46,30 @@ def hed_to_rgb(stains: torch.Tensor) -> torch.Tensor:
     return torch.exp(log_rgb).clamp(0, 1).permute(0, 3, 1, 2)
 
 
-def hed_augment(x: torch.Tensor, sigma: float, generator: torch.Generator | None = None) -> torch.Tensor:
+def hed_augment(x: torch.Tensor, sigma: float, generator: torch.Generator | None = None,
+                mode: str = "relative") -> torch.Tensor:
     """Randomly perturb the H, E and DAB channels of each image.
 
-    For every image and every stain channel s:  s' = alpha * s + beta, with
-    alpha ~ U(1 - sigma, 1 + sigma) and beta ~ U(-sigma, sigma).
-    Tellez et al. call sigma ~0.05 "light" and ~0.2 "strong".
+    mode "relative" (default): s' = alpha * s with alpha ~ U(1 - sigma, 1 + sigma) per image and
+        channel. This is a change in intensity *ratio* (Tellez et al. describe strengths of 0.05 and
+        0.2 as ratio ranges). Stain-free background stays white, as in real stain variation.
+    mode "absolute": s' = alpha * s + beta with beta ~ U(-sigma, sigma) added in raw concentration
+        units. These units are small (nuclei ~0.13, tissue ~0.05, background ~0.005), so even
+        sigma = 0.05 recolours or blanks patches; kept only to document that comparison.
     `generator` must be a CPU generator (random numbers are drawn on CPU, then
     moved to the tensor's device, so seeding behaves the same on CPU and GPU).
     """
+    if mode not in ("relative", "absolute"):
+        raise ValueError(f"unknown mode {mode}")
     if sigma == 0:
         return x
     n = x.shape[0]
     alpha = 1 + (torch.rand(n, 1, 1, 3, generator=generator) * 2 - 1) * sigma
-    beta = (torch.rand(n, 1, 1, 3, generator=generator) * 2 - 1) * sigma
-    alpha, beta = alpha.to(x.device, x.dtype), beta.to(x.device, x.dtype)
+    alpha = alpha.to(x.device, x.dtype)
     stains = rgb_to_hed(x)
+    if mode == "relative":
+        return hed_to_rgb(alpha * stains)
+    beta = ((torch.rand(n, 1, 1, 3, generator=generator) * 2 - 1) * sigma).to(x.device, x.dtype)
     return hed_to_rgb(alpha * stains + beta)
 
 
