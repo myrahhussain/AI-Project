@@ -1,4 +1,4 @@
-# Interim experiment settings (shrink n_train / epochs if the Colab speed test says so)
+# Frozen experiment settings (used for the interim and final runs)
 split:
   n_train: 40000
   n_id_val: 8000
@@ -10,8 +10,11 @@ train:
   batch_size: 128
   lr: 0.0003
   weight_decay: 0.0001
-  sigma: 0.1
+  sigma: 0.2
+  hed_mode: relative
+  backbone: resnet18
+  ref: pooled
   amp: true
   threshold_source: id_val
-seeds: [0, 1, 2]
+seeds: [0, 1, 2, 3, 4]   # main study; ablations, backbones and LOHO use 0 1 2
 methods: [baseline, hed, vahadane, both]

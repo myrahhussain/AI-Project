@@ -63,3 +63,13 @@ def test_unknown_method_is_rejected():
     with pytest.raises(ValueError):
         train.train_model(np.zeros((4, 96, 96, 3), np.uint8), np.zeros(4, np.int64),
                           train.Config(method="nope", pretrained=False), train.get_device())
+
+
+def test_backbone_is_recorded_and_held_out_hospital_gap_is_reported():
+    data = make_data()
+    data["test"] = data.pop("ood_val")
+    cfg = train.Config(method="baseline", epochs=1, batch_size=32, pretrained=False, amp=False,
+                       backbone="resnet18_histo", split="loho", test_hospital=1)
+    r = train.run_method(data, cfg)
+    assert r["config"]["backbone"] == "resnet18_histo" and r["config"]["test_hospital"] == 1
+    assert set(r["gap_test"]) == {"acc", "sens", "spec", "auc"} and "gap" not in r

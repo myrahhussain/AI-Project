@@ -46,18 +46,26 @@ def cam_figure(x_uint8, idx, cams: dict, probs: dict, out: str, title: str = "")
             ax[r, c].imshow(overlay(x_uint8[i], cams[n][r])); ax[r, c].axis("off")
             ax[r, c].set_title(f"{n} p={probs[n][i]:.2f}", fontsize=8)
     ax[0, 0].set_title("original", fontsize=8)
-    fig.tight_layout(rect=(0, 0, 1, 0.985 if title else 1.0))   # leave room so the title sits above the column headers
     if title:
-        fig.suptitle(title, fontsize=10, y=0.998)
+        import textwrap
+        # wrap to the figure width (about 11 characters per inch at this font size) so it is never clipped
+        title = textwrap.fill(title, max(20, int(fig.get_figwidth() * 11)))
+        # reserve room for the wrapped lines (about 0.22 inch each) above the column headers
+        top = 1 - (0.3 + 0.22 * title.count("\n")) / fig.get_figheight()
+        fig.tight_layout(rect=(0, 0, 1, top))
+        fig.suptitle(title, fontsize=10, y=0.999)
+    else:
+        fig.tight_layout()
     fig.savefig(out, dpi=150); plt.close(fig)
 
 
-def analyze(x_uint8, y, slide, models: dict, thresholds: dict, out_dir: str, n_show: int = 12, device="cpu"):
+def analyze(x_uint8, y, slide, models: dict, thresholds: dict, out_dir: str, n_show: int = 12, device="cpu", inputs: dict | None = None):
     """Compare methods on one evaluation set (e.g. the unseen hospital).
 
     models / thresholds: {method: model} / {method: decision threshold chosen on validation data}.
     Writes cam figures for false positives and false negatives of the FIRST method (the baseline)
-    and returns a summary dict. CAMs are LayerCAM from the finer layers: a way to investigate
+    and returns a summary dict. `inputs` optionally maps a method to the patches it was trained on
+    (e.g. stain-normalized ones); methods not listed get x_uint8. CAMs are LayerCAM from the finer layers: a way to investigate
     failures, not proof of what the model 'reasons'.
     """
     import os
@@ -67,7 +75,9 @@ def analyze(x_uint8, y, slide, models: dict, thresholds: dict, out_dir: str, n_s
 
     os.makedirs(out_dir, exist_ok=True)
     names = list(models)
-    probs = {n: predict(models[n], x_uint8, device) for n in names}
+    inputs = inputs or {}
+    xin = {n: inputs.get(n, x_uint8) for n in names}
+    probs = {n: predict(models[n], xin[n], device) for n in names}
     errs = {n: error_sets(y, probs[n], thresholds[n]) for n in names}
     base = names[0]
     summary = {"counts": {n: {"fp": int(len(e["fp"])), "fn": int(len(e["fn"]))} for n, e in errs.items()},
@@ -82,8 +92,8 @@ def analyze(x_uint8, y, slide, models: dict, thresholds: dict, out_dir: str, n_s
         # most confident mistakes first
         order = np.argsort(-probs[base][idx] if kind == "fp" else probs[base][idx])
         idx = idx[order][:n_show]
-        t = torch.from_numpy(x_uint8[idx]).permute(0, 3, 1, 2).float().div(255).to(device)
-        cams = {n: camlib.fused_layercam(models[n].to(device), t).cpu().numpy() for n in names}
+        ts = {n: torch.from_numpy(xin[n][idx]).permute(0, 3, 1, 2).float().div(255).to(device) for n in names}
+        cams = {n: camlib.fused_layercam(models[n].to(device), ts[n]).cpu().numpy() for n in names}
         label = "false positives (healthy called tumour)" if kind == "fp" else "false negatives (missed tumour)"
         cam_figure(x_uint8, idx, cams, probs, os.path.join(out_dir, f"{base}_{kind}_cams.png"),
                    f"{label}: baseline errors, same patches under each method")

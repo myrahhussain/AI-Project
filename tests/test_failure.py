@@ -48,3 +48,19 @@ def test_analyze_end_to_end_on_tiny_models(tmp_path):
     assert set(s["counts"]) == {"baseline", "hed"}
     assert len(s["worst_slides"]) <= 4 and "hed_fixes_baseline_fp" in s
     assert any(f.name.endswith("_cams.png") for f in tmp_path.iterdir())
+
+
+def test_analyze_scores_each_method_on_its_own_input(tmp_path, monkeypatch):
+    import torch
+    from src import failure, cam
+    monkeypatch.setattr(cam, "fused_layercam", lambda model, t: torch.zeros(len(t), t.shape[2], t.shape[3]))
+
+    class Mean(torch.nn.Module):          # logit = mean pixel brightness, so the input decides the output
+        def forward(self, x):
+            return (x.mean(dim=(1, 2, 3)) - 0.5) * 20
+    x_raw = np.zeros((6, 8, 8, 3), np.uint8)             # dark -> low probability
+    x_norm = np.full((6, 8, 8, 3), 255, np.uint8)        # bright -> high probability
+    y = np.ones(6, int); slide = np.zeros(6, int)
+    m = {"a": Mean(), "b": Mean()}
+    s = failure.analyze(x_raw, y, slide, m, {"a": 0.5, "b": 0.5}, str(tmp_path), n_show=2, inputs={"b": x_norm})
+    assert s["counts"]["a"]["fn"] == 6 and s["counts"]["b"]["fn"] == 0

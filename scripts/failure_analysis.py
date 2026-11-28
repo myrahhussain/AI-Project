@@ -19,6 +19,8 @@ def main():
     p.add_argument("--methods", nargs="+", default=["baseline", "hed"]); p.add_argument("--seed", type=int, default=0)
     p.add_argument("--n_train", type=int, default=40000); p.add_argument("--n_eval", type=int, default=8000)
     p.add_argument("--n_show", type=int, default=12)
+    p.add_argument("--norm_methods", nargs="+", default=["vahadane", "both"],
+                   help="methods trained on stain-normalized patches; they are evaluated on ood_val_norm")
     a = p.parse_args()
     from wilds import get_dataset
     meta = data.load_meta(get_dataset(dataset="camelyon17", download=False, root_dir=a.root))
@@ -26,6 +28,7 @@ def main():
     idx = split["ood_val"]
     x = data.load_cached_patches(a.cache, "ood_val")
     assert len(x) == len(idx), f"cache has {len(x)} patches but the split has {len(idx)}: use the same --n_train/--n_eval as the run"
+    inputs = {m: data.load_cached_patches(a.cache, "ood_val_norm") for m in a.methods if m in a.norm_methods}
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     models, thr = {}, {}
     for m in a.methods:
@@ -33,7 +36,7 @@ def main():
         net.load_state_dict(torch.load(os.path.join(a.ckpt_dir, f"{a.tag}_{m}_seed{a.seed}.pt"), map_location=dev))
         models[m] = net.to(dev)
         thr[m] = json.load(open(os.path.join(a.results, f"{a.tag}_{m}_seed{a.seed}.json")))["threshold"]
-    summary = failure.analyze(x, meta.y[idx], meta.slide_key[idx], models, thr, a.out, a.n_show, dev)
+    summary = failure.analyze(x, meta.y[idx], meta.slide_key[idx], models, thr, a.out, a.n_show, dev, inputs)
     json.dump(summary, open(os.path.join(a.out, "summary.json"), "w"), indent=1)
     print(json.dumps(summary, indent=1))
 

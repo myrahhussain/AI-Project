@@ -3,6 +3,7 @@ torchvision
 wilds
 numpy
 scikit-learn
+scipy
 scikit-image
 opencv-python-headless
 matplotlib

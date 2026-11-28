@@ -5,3 +5,6 @@ data/
 *.pt
 *.npy
 .ipynb_checkpoints/
+# keep the per-patch probabilities of the final test (small, float16)
+!results/final/probs_h1/*.npy
+!results/final/probs_h2/*.npy

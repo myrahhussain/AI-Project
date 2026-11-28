@@ -22,7 +22,7 @@ import torch
 import torch.nn as nn
 
 from . import augment, evaluate
-from .models import make_model
+from .models import make_model, BACKBONES
 
 METHODS = ("baseline", "hed", "vahadane", "both")
 
@@ -40,6 +40,11 @@ class Config:
     pretrained: bool = True
     amp: bool = True
     threshold_source: str = "id_val"   # 'id_val', 'ood_val' or 'fixed' (0.5): never the test hospital
+    backbone: str = "resnet18"         # see models.BACKBONES
+    weights_path: str | None = None    # histology backbones: downloaded weight file
+    ref: str = "pooled"                # normalisation reference used for the data (recorded only)
+    split: str = "official"            # 'official' or 'loho' (recorded only)
+    test_hospital: int | None = None   # held-out hospital for 'loho' (recorded only)
 
 
 def get_device() -> torch.device:
@@ -64,11 +69,13 @@ def train_model(x: np.ndarray, y: np.ndarray, cfg: Config, device, log=print):
     """Train one model. Returns (model, history)."""
     if cfg.method not in METHODS:
         raise ValueError(f"unknown method {cfg.method}")
+    if cfg.backbone not in BACKBONES:
+        raise ValueError(f"unknown backbone {cfg.backbone}")
     use_hed = cfg.method in ("hed", "both")
     torch.manual_seed(cfg.seed)
     rng = np.random.default_rng(cfg.seed)
     gen = torch.Generator().manual_seed(cfg.seed)
-    model = make_model(cfg.pretrained).to(device)
+    model = make_model(cfg.pretrained, cfg.backbone, cfg.weights_path).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     steps_per_epoch = len(x) // cfg.batch_size
     total_steps = steps_per_epoch * cfg.epochs
@@ -139,6 +146,8 @@ def run_method(data: dict, cfg: Config, out_dir: str | None = None, tag: str = "
     }
     if "id_val" in groups and "ood_val" in groups:
         result["gap"] = evaluate.gap(groups["id_val"]["all"], groups["ood_val"]["all"])
+    if "id_val" in groups and "test" in groups:
+        result["gap_test"] = evaluate.gap(groups["id_val"]["all"], groups["test"]["all"])
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
         with open(os.path.join(out_dir, f"{tag}_{cfg.method}_seed{cfg.seed}.json"), "w") as f:
@@ -147,3 +156,15 @@ def run_method(data: dict, cfg: Config, out_dir: str | None = None, tag: str = "
         os.makedirs(ckpt_dir, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(ckpt_dir, f"{tag}_{cfg.method}_seed{cfg.seed}.pt"))
     return result
+
+
+def model_from_run(config: dict, ckpt_path: str, device=None):
+    """Rebuild a trained model from a run's saved config (result JSON 'config') and checkpoint.
+
+    No pretrained weights are downloaded: the checkpoint already holds every weight.
+    """
+    device = device or get_device()
+    model = make_model(pretrained=False, backbone=config.get("backbone", "resnet18"))
+    state = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+    model.load_state_dict(state)
+    return model.to(device).eval()

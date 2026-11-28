@@ -66,10 +66,11 @@ def aggregate(results: list[dict]) -> dict:
             for k in METRICS:
                 v = np.array([r["groups"][split]["all"][k] for r in results], dtype=float)
                 rows[f"{split}_{k}"] = (float(np.nanmean(v)), float(np.nanstd(v)))
-    if all("gap" in r for r in results):
-        for k in METRICS:
-            v = np.array([r["gap"][k] for r in results], dtype=float)
-            rows[f"gap_{k}"] = (float(np.nanmean(v)), float(np.nanstd(v)))
+    for key in ("gap", "gap_test"):
+        if results and all(key in r for r in results):
+            for k in METRICS:
+                v = np.array([r[key][k] for r in results], dtype=float)
+                rows[f"{key}_{k}"] = (float(np.nanmean(v)), float(np.nanstd(v)))
     return rows
 
 
